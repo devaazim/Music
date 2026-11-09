@@ -1,0 +1,45 @@
+name: Build APK
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # Generate the native android/ios projects, keeping our own lib/ and pubspec.
+      - name: Generate platform projects
+        run: |
+          cp -r lib /tmp/lib_bak
+          cp pubspec.yaml /tmp/pubspec_bak.yaml
+          flutter create . --project-name tunely --org com.example --platforms=android,ios
+          rm -rf lib test
+          cp -r /tmp/lib_bak lib
+          cp /tmp/pubspec_bak.yaml pubspec.yaml
+
+      - name: Apply Android background-audio settings
+        run: python3 tool/patch_android.py
+
+      - run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tunely-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
